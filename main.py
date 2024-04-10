@@ -4,9 +4,11 @@ from aiogram.types import ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButt
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+import copy
+from pprint import pprint
 
 # Установка соединения с базой данных при помощи ORM
 engine = create_engine('mysql://user1:1234@localhost/taro-bot')
@@ -18,6 +20,7 @@ Base = declarative_base()
 class InformationAboutUsers(Base):
     __tablename__ = 'information_about_users'
     id = Column(Integer, primary_key=True)
+    is_owner = Column(Boolean, default=False)
     username = Column(String(255))
     first_name = Column(String(255))
     last_name = Column(String(255))
@@ -49,7 +52,8 @@ chat_id = -4139713338
 current_part_of_survey = 0
 commands = ['start', 'open', 'go']
 
-main_menu_buttons = ["Список услуг","Наши контакты","Редактирование анкеты"]
+main_menu_buttons = ["Список услуг","Наши контакты","Просмотр анкеты","Редактирование анкеты"]
+main_menu_buttons_for_owners = ["Список пользователей","Просмотр анкеты пользователя"]
 back_to_survey_buttons_dict = {back_to_survey_text: 'back_to_survey',
                                    end_survey_text: 'finish_survey'}
 
@@ -128,7 +132,18 @@ questions_part_4 = {'Ваш род деятельности':'Напишите, 
 questions_part_5 = {'Понятие энергоценности':'Вам известно понятие энергоценность?',
                     'Степень доверия':'Насколько вы готовы довериться мне? (по 10-балльной шкале)'}
 
-questions_full_survey = [questions_part_1, questions_part_2, questions_part_3, questions_part_4, questions_part_5]
+all_questions_dict = {'questions_part_1':questions_part_1,
+                      'questions_part_2':questions_part_2,
+                      'questions_part_3':questions_part_3,
+                      'questions_part_4':questions_part_4,
+                      'questions_part_5':questions_part_5}
+
+all_questions_WITH_ANSWERS_dict = copy.deepcopy(all_questions_dict)
+for every_subdict in all_questions_WITH_ANSWERS_dict:
+    for every in all_questions_WITH_ANSWERS_dict[every_subdict]:
+        question_text = all_questions_WITH_ANSWERS_dict[every_subdict][every] = 'без ответа'
+
+
 
 #текущая часть анкеты
 def process_current_questions_part_status(arg):
@@ -253,6 +268,7 @@ async def check_if_chat_member(message, user_id):
         await bot.send_message(message.from_user.id, text="Вы не состоите в группе :(", reply_markup=main_menu())
         return
 
+
 #пустое inline-меню
 def empty_menu():
     keyboard = InlineKeyboardMarkup()
@@ -273,8 +289,10 @@ def back_to_survey_kb():
 
 #клавиатура главного меню внизу
 def main_menu():
-    keyboard = ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
+    keyboard = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     keyboard.add(*main_menu_buttons)
+    if session.query(InformationAboutUsers).filter_by(is_owner=1):
+        keyboard.add(KeyboardButton(text='Список пользователей'), (KeyboardButton(text='Просмотр анкеты пользователя')))
     return keyboard
 
 
@@ -304,9 +322,32 @@ def find_key_by_value(dictionary, value):
             return key
     return None
 
-async def check_if_user_in_group():
-    a = await bot.get_chat_member(chat_id, user_id)
-    print(a)
+#сохранение фиксированных ответов
+def update_data(dict, data, current_part_of_survey, question):
+    global all_questions_WITH_ANSWERS_dict
+    answer_user = find_key_by_value(dict, data)
+    questions_part = f'questions_part_{current_part_of_survey}'
+    part_of_survey = all_questions_WITH_ANSWERS_dict.get(questions_part)
+    key = find_key_by_value(all_questions_dict[questions_part], question)
+    part_of_survey[key] = answer_user
+
+#отобразить полную анкету
+async def show_answered_full_survey(id):
+    question_number_in_survey = 0
+    survey_answers_list = 'Ваша анкета\n'
+    for key, value in all_questions_WITH_ANSWERS_dict.items():
+        for question, answer in value.items():
+            print()
+            question_number_in_survey  += 1
+            survey_answers_list+= f'{question_number_in_survey }.{question}\n"{all_questions_dict[key][question]}"\nВаш ответ: {answer}\n\n'
+            if question_number_in_survey == 10:
+                await bot.send_message(id, survey_answers_list)
+                survey_answers_list = ''
+    if survey_answers_list != '':
+        await bot.send_message(id, survey_answers_list)
+
+
+# def save_data_to_db():
 
 
 @dp.message_handler(commands=commands)
@@ -323,37 +364,80 @@ async def process_start_command(message: types.Message):
         existing_user.last_name = values[3]
         session.commit()
         await bot.send_message(message.chat.id, text=f'Данные пользователя с id={values[0]} успешно обновлены.')
-
     else:
         user_info = InformationAboutUsers(id=values[0], username=values[1], first_name=values[2], last_name=values[3])
         session.add(user_info)
         session.commit()
         await bot.send_message(message.chat.id, text=f'Пользователь с id={values[0]} успешно добавлен в базу данных.')
-
     await message.reply("Здравствуйте! Я - бот, и я помогу Вам с тем, что Вам нужно. "
                         "Желаете заполнить анкету для улучшения взаимодействия?", reply_markup=greet_kb)
 
 # Обработчик кнопки "Список услуг"
-@dp.message_handler(lambda message: message.text == "Список услуг", state="*")
+@dp.message_handler(lambda message: message.text == main_menu_buttons[0], state="*")
 async def process_services_menu(message: types.Message):
     await message.answer("Здесь Вы можете найти список наших услуг:", reply_markup=services_menu())
 
 # Обработчик кнопки "Наши контакты"
-@dp.message_handler(lambda message: message.text == "Наши контакты", state="*")
+@dp.message_handler(lambda message: message.text == main_menu_buttons[1], state="*")
 async def process_contacts_menu(message: types.Message):
     await message.answer("Наши контакты:", reply_markup=contacts_menu())
 
+# Обработчик кнопки "Просмотр анкеты"
+@dp.message_handler(lambda message: message.text == main_menu_buttons[2], state="*")
+async def show_survey_for_user(message: types.Message):
+    await show_answered_full_survey(message.from_user.id)
+
+
 # Обработчик кнопки "Редактирование анкеты"
-@dp.message_handler(lambda message: message.text == "Редактирование анкеты", state="*")
+@dp.message_handler(lambda message: message.text == main_menu_buttons[3], state="*")
 async def process_edit_survey(message: types.Message):
     await bot.send_message(message.from_user.id, f'{process_current_questions_part_status(current_part_of_survey)} {survey_is_in_progress_text}',
                            reply_markup=survey_part())
+
+@dp.message_handler(lambda message: message.text == main_menu_buttons_for_owners[0], state="*")
+async def process_all_registered_users(message: types.Message):
+    result = session.execute(select(InformationAboutUsers.id, InformationAboutUsers.username, InformationAboutUsers.first_name, InformationAboutUsers.last_name))
+    all_registered_users = f"Все зарегистрированные пользователи:\n"
+    for index, row in enumerate(result):
+        print(index)
+        print(row)
+        id_value = row[0]
+        username_value = row[1]
+        first_name_value = row[2]
+        last_name_value = row[3]
+        all_registered_users += f"{index + 1}. ID пользователя: {id_value}\n"
+        if username_value is not None:
+            all_registered_users += f"Username пользователя: @{username_value}\n"
+        else:
+            all_registered_users += f'Username пользователя: отсутствует\n'
+
+
+        all_registered_users += f"Имя пользователя (в Telegram): {first_name_value}\n"
+
+        if last_name_value is not None:
+            all_registered_users += f'Фамилия пользователя (в Telegram): {last_name_value}\n\n'
+        else:
+            all_registered_users += f'Фамилия пользователя (в Telegram): отсутствует\n\n'
+
+        if (index + 1) % 50 == 0:
+            await message.answer(text=all_registered_users, reply_markup=main_menu())
+            all_registered_users = ''
+        else:
+            pass
+
+    await message.answer(text=all_registered_users, reply_markup=main_menu())
+
+
+@dp.message_handler(lambda message: message.text == main_menu_buttons_for_owners[1], state="*")
+async def process_contacts_menu(message: types.Message):
+    await message.answer("Пожалуйста, введите id пользователя, анкету которого вы желаете просмотреть:", reply_markup=main_menu())
 
 
 #обработка стартового выбора (проходить анкету или нет)
 @dp.message_handler()
 async def process_start_command(message: types.Message):
     global current_part_of_survey
+    current_part_of_survey = 0
     current_part_of_survey += 1
     if message.text == 'Да, хочу':
         await bot.send_message(message.from_user.id, f'{process_current_questions_part_status(current_part_of_survey)} {survey_is_in_progress_text}',
@@ -434,6 +518,11 @@ async def process_answer(message: types.Message, state: FSMContext):
         await message.answer(f'Ваш ответ на вопрос "{find_key_by_value(questions_part, question)}": "{answer}". '
                              f'Выберите вопрос или нажмите "{end_survey_text[2:]}".',
                          reply_markup=survey_part())
+        global all_questions_WITH_ANSWERS_dict
+        #сохранение ответа в словарь
+        answers_questions_part = f'questions_part_{current_part_of_survey}'
+        key = find_key_by_value(all_questions_dict[answers_questions_part], question)
+        all_questions_WITH_ANSWERS_dict[answers_questions_part][key] = answer
         await Form.waiting_for_question.set()
         async with state.proxy() as data:
             data['question'] = None
@@ -441,9 +530,10 @@ async def process_answer(message: types.Message, state: FSMContext):
 
 
 
-#ответы на вопрос "предпочитаемые вид общения"
+#ответы на вопрос "предпочитаемый вид общения"
 @dp.callback_query_handler(lambda c: find_key_by_value(prefered_way_to_communicate, c.data), state="*")
 async def process_back_to_survey(callback_query: types.CallbackQuery):
+    update_data(prefered_way_to_communicate, callback_query.data, current_part_of_survey, question)
     await callback_query.answer()
     await bot.edit_message_text(
         f'{process_current_questions_part_status(current_part_of_survey)} Ваш ответ на вопрос "{question}":'
@@ -457,6 +547,7 @@ async def process_back_to_survey(callback_query: types.CallbackQuery):
 #ответы на вопрос "какой тип консультации вас интересует"
 @dp.callback_query_handler(lambda c: find_key_by_value(consultations_types, c.data), state="*")
 async def process_back_to_survey(callback_query: types.CallbackQuery):
+    update_data(consultations_types, callback_query.data, current_part_of_survey, question)
     await callback_query.answer()
     await bot.edit_message_text(
         f'{process_current_questions_part_status(current_part_of_survey)} Ваш ответ на вопрос "{question}":'
@@ -470,6 +561,7 @@ async def process_back_to_survey(callback_query: types.CallbackQuery):
 #ответы на вопрос "наиболее актуальный способ связи"
 @dp.callback_query_handler(lambda c: find_key_by_value(fastest_way_to_answer, c.data), state="*")
 async def process_back_to_survey(callback_query: types.CallbackQuery):
+    update_data(fastest_way_to_answer, callback_query.data, current_part_of_survey, question)
     await callback_query.answer()
     await bot.edit_message_text(
         f'{process_current_questions_part_status(current_part_of_survey)} Ваш ответ на вопрос "{question}":'
@@ -482,6 +574,7 @@ async def process_back_to_survey(callback_query: types.CallbackQuery):
 #ответы на вопрос со шкалой
 @dp.callback_query_handler(lambda c: find_key_by_value(out_of_ten_scale, c.data), state="*")
 async def process_back_to_survey(callback_query: types.CallbackQuery):
+    update_data(out_of_ten_scale, callback_query.data, current_part_of_survey, question)
     await callback_query.answer()
     await bot.edit_message_text(
         f'{process_current_questions_part_status(current_part_of_survey)} Ваш ответ на вопрос "{question}":'
@@ -497,6 +590,7 @@ async def process_back_to_survey(callback_query: types.CallbackQuery):
                                      or c.data == 'answer_partially_button'
                                      or c.data in consultations_types, state="*")
 async def process_back_to_survey(callback_query: types.CallbackQuery):
+    update_data(yes_no_partially_buttons_dict, callback_query.data, current_part_of_survey, question)
     await callback_query.answer()
     await bot.edit_message_text(
         f'{process_current_questions_part_status(current_part_of_survey)} Ваш ответ на вопрос "{question}":'
@@ -542,7 +636,6 @@ async def process_next_part_of_survey(callback_query: types.CallbackQuery):
 #завершение заполнения анкеты
 @dp.callback_query_handler(lambda c: c.data == 'finish_survey', state="*")
 async def process_finish_survey(callback_query: types.CallbackQuery):
-    await check_if_user_in_group()
     # if user_in_group is False:
     #     await bot.send_message(callback_query.from_user.id, 'Подпишитесь, пожалуйста, на мою группу. Там Вы сможете найти много интересного!\nhttps://t.me/+kx-uithPXXA3MWQy')
     #
