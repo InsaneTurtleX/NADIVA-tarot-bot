@@ -63,6 +63,8 @@ dp = Dispatcher(bot, storage=storage)
 #текстовые фразы
 button_agree_text = 'Да'
 button_disagree_text = 'Нет'
+button_main_agree_text = '✅ Да, хочу'
+button_main_disagree_text = '❌ Нет, не хочу'
 end_survey_text = '🚫 Закончить опрос'
 back_to_survey_text = '⬅️ Назад к анкете'
 survey_is_finished_text = 'Заполнение анкеты завершено. Вы сможете отредактировать ее позднее, если захотите.'
@@ -77,7 +79,7 @@ chat_id = -4139713338
 current_part_of_survey = 0
 commands = ['start', 'open', 'go']
 
-main_menu_buttons = ["Список услуг","Наши контакты","Просмотр анкеты","Редактирование анкеты"]
+main_menu_buttons = ["✨Список услуг","📞Наши контакты","📋Просмотр анкеты","✏️Редактирование анкеты"]
 main_menu_buttons_for_owners = ["Список пользователей","Просмотр анкеты пользователя"]
 back_to_survey_buttons_dict = {back_to_survey_text: 'back_to_survey',
                                    end_survey_text: 'finish_survey'}
@@ -177,8 +179,8 @@ def process_current_questions_part_status(arg):
 
 
 #секция с клавиатурами
-button_main_agree = KeyboardButton('Да, хочу')
-button_main_disagree = KeyboardButton('Нет, не хочу')
+button_main_agree = KeyboardButton(button_main_agree_text)
+button_main_disagree = KeyboardButton(button_main_disagree_text)
 greet_kb = ReplyKeyboardMarkup(resize_keyboard=True)
 greet_kb.row(button_main_agree, button_main_disagree)
 
@@ -358,6 +360,8 @@ def update_data(dict, data, current_part_of_survey, question):
 
 #отобразить полную анкету
 async def show_answered_full_survey(id):
+    print(id)
+    print(all_questions_WITH_ANSWERS_dict)
     question_number_in_survey = 0
     survey_answers_list = 'Ваша анкета\n'
     for key, value in all_questions_dict.items():
@@ -439,7 +443,7 @@ async def process_start_command(message: types.Message, ):
         for every_part in all_questions_dict:
             for question, text in all_questions_dict[every_part].items():
                 question_id = session.query(Question).filter_by(text=text).first().id
-                user_answer = session.query(UserAnswer).filter_by(question_id=question_id).first().answer
+                user_answer = session.query(UserAnswer).filter_by(user_id=message.from_user.id, question_id=question_id).first().answer
                 all_questions_WITH_ANSWERS_dict[question] = user_answer
                 all_questions_with_questions_text_dict[question] = text
         session.commit()
@@ -562,12 +566,12 @@ async def process_start_command(message: types.Message):
     global current_part_of_survey
     current_part_of_survey = 0
     current_part_of_survey += 1
-    if message.text == 'Да, хочу':
+    if message.text == button_main_agree_text:
         await Form.waiting_for_question.set()
         await bot.send_message(message.from_user.id, f'{process_current_questions_part_status(current_part_of_survey)} {survey_is_in_progress_text}',
                                reply_markup=survey_part())
 
-    elif message.text == 'Нет, не хочу':
+    elif message.text == button_main_disagree_text:
         await bot.send_message(message.from_user.id, main_menu_text, reply_markup=main_menu(message))
 
 
