@@ -9,7 +9,6 @@ from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
 
 
-
 # Установка соединения с базой данных при помощи ORM
 host = 'eporqep6b4b8ql12.chr7pe7iynqr.eu-west-1.rds.amazonaws.com'
 username = 'hit9za4dgrwewfx1'
