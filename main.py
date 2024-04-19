@@ -20,6 +20,8 @@ engine = create_engine(f'mysql://{username}:{password}@{host}/{database}')
 #базовый класс модели
 Base = declarative_base()
 
+
+
 #создание модели таблицы
 class InformationAboutUsers(Base):
     __tablename__ = 'information_about_users'
