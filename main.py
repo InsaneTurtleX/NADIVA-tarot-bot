@@ -10,6 +10,7 @@ from sqlalchemy.ext.declarative import declarative_base
 import copy
 from pprint import pprint
 
+
 # Установка соединения с базой данных при помощи ORM
 host = 'eporqep6b4b8ql12.chr7pe7iynqr.eu-west-1.rds.amazonaws.com'
 username = 'hit9za4dgrwewfx1'
