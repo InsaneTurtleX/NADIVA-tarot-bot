@@ -10,10 +10,10 @@ from sqlalchemy.ext.declarative import declarative_base
 
 
 # Установка соединения с базой данных при помощи ORM
-host = 'eporqep6b4b8ql12.chr7pe7iynqr.eu-west-1.rds.amazonaws.com'
-username = 'hit9za4dgrwewfx1'
-password = 'bs8790sarceyn0hv'
-database = 'g09lyqcrg09g5exs'
+host = 'uyu7j8yohcwo35j3.cbetxkdyhwsb.us-east-1.rds.amazonaws.com'
+username = 'n0uaw5o3fktova6u'
+password = 'mn6pcqy0nnwtxxi0'
+database = 'wvmvftkdk5oll09x'
 engine = create_engine(f'mysql://{username}:{password}@{host}/{database}')
 
 #базовый класс модели
