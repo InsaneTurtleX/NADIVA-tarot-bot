@@ -11,10 +11,15 @@ import copy
 from pprint import pprint
 
 # Установка соединения с базой данных при помощи ORM
-engine = create_engine('mysql://user1:1234@localhost/taro-bot')
+host = 'eporqep6b4b8ql12.chr7pe7iynqr.eu-west-1.rds.amazonaws.com'
+username = 'hit9za4dgrwewfx1'
+password = 'bs8790sarceyn0hv'
+database = 'g09lyqcrg09g5exs'
+engine = create_engine(f'mysql://{username}:{password}@{host}/{database}')
 
 #базовый класс модели
 Base = declarative_base()
+
 
 #создание модели таблицы
 class InformationAboutUsers(Base):
