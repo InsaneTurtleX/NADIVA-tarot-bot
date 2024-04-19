@@ -8,7 +8,6 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean, select, 
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
 import copy
-
 from pprint import pprint
 
 
