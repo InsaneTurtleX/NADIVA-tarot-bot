@@ -7,8 +7,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, select, ForeignKey
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
-import copy
-from pprint import pprint
+
 
 
 # Установка соединения с базой данных при помощи ORM
